@@ -1,11 +1,11 @@
-Built With  
+Built With:
   - tensorflow
   - matplotlib
   - scikit-learn
   - numpy
   - pandas
 
-Contributing
+Contributing:
   1. Fork the Project
   2. Create your Feature Branch (git checkout -b feature/AmazingFeature)
   3. Commit your Changes (git commit -m 'Add some AmazingFeature')
@@ -13,5 +13,6 @@ Contributing
   5. Open a Pull Request
 If you have any ideas to improve this, feel free to fork the repository and submit a pull request. Alternatively, you can open an issue with the "enhancement" tag. Don't forget to show your support by giving the project a star! Thank you!
 
-Contact
+Contact:
+
   gptaeee@gmail.com
