@@ -9,8 +9,6 @@ df = yf.download("AAPL", start="2021-01-01", end="2021-07-01")
 print(df)
 
 
-
-
 connection = mysql.connector.connect(host='localhost',
                                          database='stocks',
                                          user=USERNAME,
