@@ -24,7 +24,7 @@ cursor = connection.cursor()
 end_date = date.today()
 start_date = end_date - timedelta(days=3650)
 
-sql_query = f"SELECT * FROM historical_data WHERE symbol = 'MSFT' AND '{start_date}' <= Date AND Date <= '{end_date}' ORDER BY Date ASC"
+sql_query = f"SELECT * FROM historical_data WHERE symbol = 'AAPL' AND '{start_date}' <= Date AND Date <= '{end_date}' ORDER BY Date ASC"
 cursor.execute(sql_query)
 
 df_sql_data = pd.DataFrame.from_records(cursor.fetchall(), columns=[x[0] for x in cursor.description])
@@ -113,15 +113,17 @@ RS = AG / AL
 
 df_sql_data['RSI'] = 100 - (100 / (1 + RS))
 
-df_sql_data['SMA'] = df_sql_data['close'].rolling(window=200).mean()
+df_sql_data['SMA'] = df_sql_data['close'].rolling(window=10).mean()
 
-df_sql_data['d_SMA'] = df_sql_data['d_close'].rolling(window=200).mean()
+df_sql_data['SMA5'] = df_sql_data['close'].rolling(window=5).mean()
 
-df_sql_data['d_SMA5'] = df_sql_data['d_close5'].rolling(window=200).mean()
+df_sql_data['SMA30'] = df_sql_data['close'].rolling(window=30).mean()
 
-df_sql_data['d_SMA10'] = df_sql_data['d_close10'].rolling(window=200).mean()
+df_sql_data['d_SMA'] = (df_sql_data['SMA']-df_sql_data['close'])/df_sql_data['close']
 
-df_sql_data['d_SMA30'] = df_sql_data['d_close30'].rolling(window=200).mean()
+df_sql_data['d_SMA5'] = (df_sql_data['SMA5']-df_sql_data['close'])/df_sql_data['close']
+
+df_sql_data['d_SMA30'] = (df_sql_data['SMA30']-df_sql_data['close'])/df_sql_data['close']
 
 print(df_sql_data)
 df_sql_data.to_excel('stock_h.xlsx', index=True)
@@ -137,7 +139,7 @@ mpf.plot(df_sql_data, type='candle', title='Price Graph with Volume and Volatili
 '''
 # -----------------------
 
-input_columns = ['d_high', 'd_low', 'd_close', 'volume', 'd_high5', 'd_low5', 'd_close5', 'd_high10', 'd_low10', 'd_close10', 'd_high30', 'd_low30', 'd_close30', 'RSI', 'SMA', 'd_SMA', 'd_SMA5', 'd_SMA10', 'd_SMA30']
+input_columns = ['d_high', 'd_low', 'd_close', 'volume', 'd_high5', 'd_low5', 'd_close5', 'd_high10', 'd_low10', 'd_close10', 'd_high30', 'd_low30', 'd_close30', 'RSI', 'SMA', 'd_SMA', 'SMA5', 'SMA30', 'd_SMA5', 'd_SMA30']
 
 df_sql_data = df_sql_data.dropna()
 
@@ -188,7 +190,7 @@ model = tf.keras.Sequential([
 
 
 model.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['accuracy'])
-model.fit(x_train_scaled, y_train, epochs=10000, batch_size=64)
+model.fit(x_train_scaled, y_train, epochs=5000, batch_size=64)
 
 results = model.evaluate(x_test_scaled, y_test)
 
