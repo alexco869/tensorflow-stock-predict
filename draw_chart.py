@@ -10,10 +10,13 @@ from sklearn.preprocessing import MinMaxScaler
 
 TICKER = "AAPL"
 
+USERNAME="stocks"
+PASSWORD="stocks"
+
 connection = mysql.connector.connect(host='localhost',
                                     database='stocks',
-                                    user='alex',
-                                    password='alex2000')
+                                    user=USERNAME,
+                                    password=PASSWORD)
 
 cursor = connection.cursor()
 
@@ -98,6 +101,28 @@ df_sql_data['loss5'] =  ((df_sql_data['low_5next'] - df_sql_data["open"]) /  df_
 
 df_sql_data['WIN']  = np.where(df_sql_data['win5'] > 4.2, 'buy', '')
 
+price_change = df_sql_data['close'].diff()
+
+gain = price_change.where(price_change > 0, 0)
+loss = -price_change.where(price_change < 0, 0)
+
+AG = gain.rolling(window=14).mean()
+AL = loss.rolling(window=14).mean()
+
+RS = AG / AL
+
+df_sql_data['RSI'] = 100 - (100 / (1 + RS))
+
+df_sql_data['SMA'] = df_sql_data['close'].rolling(window=200).mean()
+
+df_sql_data['d_SMA'] = df_sql_data['d_close'].rolling(window=200).mean()
+
+df_sql_data['d_SMA5'] = df_sql_data['d_close5'].rolling(window=200).mean()
+
+df_sql_data['d_SMA10'] = df_sql_data['d_close10'].rolling(window=200).mean()
+
+df_sql_data['d_SMA30'] = df_sql_data['d_close30'].rolling(window=200).mean()
+
 print(df_sql_data)
 df_sql_data.to_excel('stock_h.xlsx', index=True)
 
@@ -112,7 +137,7 @@ mpf.plot(df_sql_data, type='candle', title='Price Graph with Volume and Volatili
 '''
 # -----------------------
 
-input_columns = ['d_high', 'd_low', 'd_close', 'volume', 'd_high5', 'd_low5', 'd_close5', 'd_high10', 'd_low10', 'd_close10', 'd_high30', 'd_low30', 'd_close30']
+input_columns = ['d_high', 'd_low', 'd_close', 'volume', 'd_high5', 'd_low5', 'd_close5', 'd_high10', 'd_low10', 'd_close10', 'd_high30', 'd_low30', 'd_close30', 'RSI', 'SMA', 'd_SMA', 'd_SMA5', 'd_SMA10', 'd_SMA30']
 
 df_sql_data = df_sql_data.dropna()
 
@@ -152,15 +177,18 @@ x_test_scaled = scaler.transform(x_test)
 
 model = tf.keras.Sequential([
     tf.keras.layers.Dense(64, activation='relu', input_shape=(x_train_scaled.shape[1],)),
-    tf.keras.layers.Dense(64, activation='relu'),
-    tf.keras.layers.Dense(64, activation='relu'),
+    tf.keras.layers.Dropout(0.2),  
+    tf.keras.layers.Dense(128, activation='relu'),
+    tf.keras.layers.Dropout(0.2),  
+    tf.keras.layers.Dense(128, activation='relu'),
+    tf.keras.layers.Dropout(0.2),  
     tf.keras.layers.Dense(1, activation='sigmoid')
 ])
 
 
 
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-model.fit(x_train_scaled, y_train, epochs=10000, batch_size=320)
+model.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['accuracy'])
+model.fit(x_train_scaled, y_train, epochs=10000, batch_size=64)
 
 results = model.evaluate(x_test_scaled, y_test)
 
