@@ -14,5 +14,4 @@ Contributing:
 If you have any ideas to improve this, feel free to fork the repository and submit a pull request. Alternatively, you can open an issue with the "enhancement" tag. Don't forget to show your support by giving the project a star! Thank you!
 
 Contact:
-
     gptaeee@gmail.com
