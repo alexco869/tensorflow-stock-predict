@@ -8,23 +8,30 @@ from sklearn.preprocessing import MinMaxScaler
 USERNAME="stocks"
 PASSWORD="stocks"
 
-connection = mysql.connector.connect(host='localhost',
+class stock_ai:
+    
+    def __init__(self, ticker, end_date, num_days):
+        self.connection = mysql.connector.connect(host='localhost',
                                     database='stocks',
                                     user=USERNAME,
                                     password=PASSWORD)
-
-cursor = connection.cursor()
-
-class stock_ai:
-    def __init__(self, ticker, end_date, num_days):
+        
+        self.cursor = self.connection.cursor()
+        self.end_date = end_date
         self.ticker = ticker
-        start_date = end_date - timedelta(days=num_days)
+        self.start_date = end_date - timedelta(days=num_days)
 
-        sql_query = f"SELECT * FROM historical_data WHERE symbol = '{self.ticker}' AND '{start_date}' <= Date AND Date <= '{end_date}' ORDER BY Date ASC"
-        cursor.execute(sql_query)
+        sql_query = f"SELECT * FROM historical_data WHERE symbol = '{self.ticker}' AND '{self.start_date}' <= Date AND Date <= '{self.end_date}' ORDER BY Date ASC"
+        self.cursor.execute(sql_query)
 
-        self.df_sql_data = pd.DataFrame.from_records(cursor.fetchall(), columns=[x[0] for x in cursor.description])
+        self.df_sql_data = pd.DataFrame.from_records(self.cursor.fetchall(), columns=[x[0] for x in self.cursor.description])
 
+    def __del__(self):
+        self.cursor.close()
+        self.connection.close()
+
+    def update(self):
+        query = f"drop * FROM historical_data WHERE symbol = '{self.ticker}' AND '{self.start_date}' <= Date AND Date <= '{self.end_date}' ORDER BY Date ASC"
 
     def fill_deltas(self):
 
@@ -180,14 +187,3 @@ class stock_ai:
 
         print("Test Loss:", loss)
         print("Test Accuracy:", accuracy)
-
-google_stock = stock_ai('GOOGL', datetime(2023, 7, 10), 3650)
-
-google_stock.fill_deltas()
-
-google_stock.train()
-
-google_stock.test()
-
-cursor.close()
-connection.close()
