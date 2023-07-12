@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
+import yfinance as yf
 
 USERNAME="stocks"
 PASSWORD="stocks"
@@ -20,6 +21,8 @@ class stock_ai:
         self.end_date = end_date
         self.ticker = ticker
         self.start_date = end_date - timedelta(days=num_days)
+        self.input_columns = ['d_high', 'd_low', 'd_close', 'volume', 'd_high5', 'd_low5', 'd_close5', 'd_high10', 'd_low10', 'd_close10', 'd_high30', 'd_low30', 'd_close30', 'RSI', 'd_SMA', 'd_SMA5']
+        self.scaler = MinMaxScaler()
 
         sql_query = f"SELECT * FROM historical_data WHERE symbol = '{self.ticker}' AND '{self.start_date}' <= Date AND Date <= '{self.end_date}' ORDER BY Date ASC"
         self.cursor.execute(sql_query)
@@ -31,7 +34,16 @@ class stock_ai:
         self.connection.close()
 
     def update(self):
-        query = f"drop * FROM historical_data WHERE symbol = '{self.ticker}' AND '{self.start_date}' <= Date AND Date <= '{self.end_date}' ORDER BY Date ASC"
+        query = f"delete FROM historical_data WHERE symbol = '{self.ticker}'"
+        self.cursor.execute(query)
+        self.connection.commit()
+        df = yf.download(self.ticker, start=self.start_date, end=self.end_date)
+        print("GO to insert ",len(df))
+        for _, row in df.iterrows():
+            query2 = "INSERT INTO historical_data (Date, open, high, low, close, adjClose, volume, symbol) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+            values = (row.name, row['Open'], row['High'], row['Low'], row['Close'], row['Adj Close'], row['Volume'], self.ticker)
+            self.cursor.execute(query2, values)
+            self.connection.commit()
 
     def fill_deltas(self):
 
@@ -124,7 +136,7 @@ class stock_ai:
         self.df_sql_data['d_SMA30'] = (self.df_sql_data['SMA30']-self.df_sql_data['close'])/self.df_sql_data['close']
 
         #print(self.df_sql_data)
-        #self.df_sql_data.to_excel('stock_h.xlsx', index=True)
+        self.df_sql_data.to_excel('stock_'+self.ticker+ '.xlsx', index=True)
 
 
         #print("Dataframe from SQL")
@@ -136,20 +148,20 @@ class stock_ai:
             #volume=True)
         #'''
 
-        input_columns = ['d_high', 'd_low', 'd_close', 'volume', 'd_high5', 'd_low5', 'd_close5', 'd_high10', 'd_low10', 'd_close10', 'd_high30', 'd_low30', 'd_close30', 'RSI', 'd_SMA', 'd_SMA5']
-
         self.df_sql_data = self.df_sql_data.dropna()
 
-        self.x = self.df_sql_data[input_columns].values
+        self.x = self.df_sql_data[self.input_columns].values
 
         self.y = self.df_sql_data['WIN'].values
     
 
-    def train(self):
+    def train(self, num_epochs):
         split_index = int(len(self.x) * 0.7)
 
         x_train = self.x[:split_index]
         y_train = self.y[:split_index]
+
+        
 
         x_test = self.x[split_index:]
         global y_test
@@ -160,11 +172,10 @@ class stock_ai:
         print("------- Y ------ ")
         print(y_train)
 
-        scaler = MinMaxScaler()
-        x_train_scaled = scaler.fit_transform(x_train)
+        x_train_scaled = self.scaler.fit_transform(x_train)
         global x_test_scaled
-        x_test_scaled = scaler.transform(x_test)
-
+        x_test_scaled = self.scaler.transform(x_test)
+        self.x_test_copy = x_test
         global model
         model = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation='relu', input_shape=(x_train_scaled.shape[1],)),
@@ -177,7 +188,7 @@ class stock_ai:
         ])
 
         model.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['accuracy'])
-        model.fit(x_train_scaled, y_train, epochs=5000, batch_size=320)
+        model.fit(x_train_scaled, y_train, epochs=num_epochs, batch_size=320)
 
     def test(self):
         results = model.evaluate(x_test_scaled, y_test)
@@ -187,3 +198,47 @@ class stock_ai:
 
         print("Test Loss:", loss)
         print("Test Accuracy:", accuracy)
+ 
+
+
+
+
+    def evaluate(self):
+        last_row = self.df_sql_data.tail(1)[self.input_columns]
+        print("last_row")
+        print(last_row)
+        print("last_row.values")
+        print(last_row.values)
+        #last_row_scaled = self.scaler.transform(last_row.values.reshape(1, -1))
+
+        #last_row_scaled = self.scaler.fit_transform(last_row.values)
+        last_row_scaled = last_row.values
+        print("last_row_scaled" )
+        print(last_row_scaled)
+    
+        print("self.x_test_copy" )
+        print(self.x_test_copy[-1])
+
+
+        print("  ------->    last_row_scaled",type(last_row_scaled), last_row_scaled.shape)    
+        prediction = model.predict(last_row_scaled)
+    
+        if prediction[0] >= 0.5:
+            print("Buy")
+        else:
+            print("Don't Buy")
+
+        print(prediction[0])
+
+        print("  ------->    self.x_test_copy[-1]",type(self.x_test_copy[-1]),self.x_test_copy[-1].shape)
+        x_test_copy_reshaped = self.x_test_copy[-1].reshape(1,-1)
+        prediction = model.predict(x_test_copy_reshaped)
+    
+        if prediction[0] >= 0.5:
+            print("Buy")
+        else:
+            print("Don't Buy")
+
+        print(prediction[0])
+
+    
