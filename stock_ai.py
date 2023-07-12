@@ -136,7 +136,9 @@ class stock_ai:
         self.df_sql_data['d_SMA30'] = (self.df_sql_data['SMA30']-self.df_sql_data['close'])/self.df_sql_data['close']
 
         #print(self.df_sql_data)
-        self.df_sql_data.to_excel('stock_'+self.ticker+ '.xlsx', index=True)
+        filename = 'stock_'+self.ticker+ '.xlsx'
+        print("SAVING FILE ",filename)
+        self.df_sql_data.to_excel(filename, index=True)
 
 
         #print("Dataframe from SQL")
