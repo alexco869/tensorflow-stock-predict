@@ -23,6 +23,7 @@ class stock_ai:
         self.start_date = end_date - timedelta(days=num_days)
         self.input_columns = ['d_high', 'd_low', 'd_close', 'volume', 'd_high5', 'd_low5', 'd_close5', 'd_high10', 'd_low10', 'd_close10', 'd_high30', 'd_low30', 'd_close30', 'RSI', 'd_SMA', 'd_SMA5']
         self.scaler = MinMaxScaler()
+        self.output_columns = ['WIN', 'LOSS', 'STRONGWIN']
 
         sql_query = f"SELECT * FROM historical_data WHERE symbol = '{self.ticker}' AND '{self.start_date}' <= Date AND Date <= '{self.end_date}' ORDER BY Date ASC"
         self.cursor.execute(sql_query)
@@ -111,6 +112,10 @@ class stock_ai:
 
         self.df_sql_data['WIN']  = np.where(self.df_sql_data['win5'] > 6, 'buy', '')
 
+        self.df_sql_data['STRONGWIN']  = np.where(self.df_sql_data['win5'] > 10, 'strong buy', '')
+
+        self.df_sql_data['LOSS']  = np.where(self.df_sql_data['loss5'] > 5, 'sell', '')
+
         price_change = self.df_sql_data['close'].diff()
 
         gain = price_change.where(price_change > 0, 0)
@@ -152,95 +157,166 @@ class stock_ai:
 
         self.df_sql_data = self.df_sql_data.dropna()
 
-        self.x = self.df_sql_data[self.input_columns].values
-
-        self.y = self.df_sql_data['WIN'].values
+       
     
 
     def train(self, num_epochs):
+        self.x = self.df_sql_data[self.input_columns].values
+        self.y = self.df_sql_data[self.output_columns].values
         split_index = int(len(self.x) * 0.7)
-
         x_train = self.x[:split_index]
-        y_train = self.y[:split_index]
-
-        
-
         x_test = self.x[split_index:]
-        global y_test
-        y_test = self.y[split_index:]
 
-        y_train = np.where(y_train == 'buy', 1, 0)
-        y_test = np.where(y_test == 'buy', 1, 0)
-        print("------- Y ------ ")
-        print(y_train)
+        y_train_win = np.where(self.df_sql_data['WIN'] == 'buy', 1, 0)
+        y_train_strongwin = np.where(self.df_sql_data['STRONGWIN'] == 'strong buy', 1, 0)
+        y_train_loss = np.where(self.df_sql_data['LOSS'] == 'sell', 1, 0)
+
+        y_train_win = y_train_win[:split_index]
+        y_train_strongwin = y_train_strongwin[:split_index]
+        y_train_loss = y_train_loss[:split_index]
+
+        # Pad or truncate the output arrays to match the size of x_train
+        y_train_win = np.pad(y_train_win, (0, len(x_train) - len(y_train_win)))
+        y_train_strongwin = np.pad(y_train_strongwin, (0, len(x_train) - len(y_train_strongwin)))
+        y_train_loss = np.pad(y_train_loss, (0, len(x_train) - len(y_train_loss)))
+
+        y_test_win = np.where(self.df_sql_data['WIN'] == 'buy', 1, 0)[split_index:]
+        y_test_strongwin = np.where(self.df_sql_data['STRONGWIN'] == 'strong buy', 1, 0)[split_index:]
+        y_test_loss = np.where(self.df_sql_data['LOSS'] == 'sell', 1, 0)[split_index:]
 
         x_train_scaled = self.scaler.fit_transform(x_train)
-        global x_test_scaled
         x_test_scaled = self.scaler.transform(x_test)
-        self.x_test_copy = x_test
-        global model
-        model = tf.keras.Sequential([
+        
+        model_win = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation='relu', input_shape=(x_train_scaled.shape[1],)),
-            tf.keras.layers.Dropout(0.2),  
+            tf.keras.layers.Dropout(0.2),
             tf.keras.layers.Dense(128, activation='relu'),
-            tf.keras.layers.Dropout(0.2),  
+            tf.keras.layers.Dropout(0.2),
             tf.keras.layers.Dense(128, activation='relu'),
-            tf.keras.layers.Dropout(0.2),  
+            tf.keras.layers.Dropout(0.2),
             tf.keras.layers.Dense(1, activation='sigmoid')
         ])
 
-        model.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['accuracy'])
-        model.fit(x_train_scaled, y_train, epochs=num_epochs, batch_size=320)
+        model_strongwin = tf.keras.Sequential([
+            tf.keras.layers.Dense(64, activation='relu', input_shape=(x_train_scaled.shape[1],)),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(128, activation='relu'),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(128, activation='relu'),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(1, activation='sigmoid')
+        ])
+
+        model_loss = tf.keras.Sequential([
+            tf.keras.layers.Dense(64, activation='relu', input_shape=(x_train_scaled.shape[1],)),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(128, activation='relu'),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(128, activation='relu'),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(1, activation='sigmoid')
+        ])
+
+        model_win.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['accuracy'])
+        model_strongwin.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['accuracy'])
+        model_loss.compile(optimizer='Adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+        model_win.fit(x_train_scaled, y_train_win, epochs=num_epochs, batch_size=320)
+        model_strongwin.fit(x_train_scaled, y_train_strongwin, epochs=num_epochs, batch_size=320)
+        model_loss.fit(x_train_scaled, y_train_loss, epochs=num_epochs, batch_size=320)
+
+        results_win = model_win.evaluate(x_test_scaled, y_test_win)
+        results_strongwin = model_strongwin.evaluate(x_test_scaled, y_test_strongwin)
+        results_loss = model_loss.evaluate(x_test_scaled, y_test_loss)
+
+        loss_win = results_win[0]
+        accuracy_win = results_win[1]
+        loss_strongwin = results_strongwin[0]
+        accuracy_strongwin = results_strongwin[1]
+        loss_loss = results_loss[0]
+        accuracy_loss = results_loss[1]
+
+        print("Test Loss (WIN):", loss_win)
+        print("Test Accuracy (WIN):", accuracy_win)
+        print("Test Loss (STRONGWIN):", loss_strongwin)
+        print("Test Accuracy (STRONGWIN):", accuracy_strongwin)
+        print("Test Loss (LOSS):", loss_loss)
+        print("Test Accuracy (LOSS):", accuracy_loss)
+
+        self.model_win = model_win
+        self.model_strongwin = model_strongwin
+        self.model_loss = model_loss
+        self.x_test_scaled = x_test_scaled
+        self.y_test_win = y_test_win
+        self.y_test_strongwin = y_test_strongwin
+        self.y_test_loss = y_test_loss
+
+
 
     def test(self):
-        results = model.evaluate(x_test_scaled, y_test)
+        model_win = self.model_win
+        model_strongwin = self.model_strongwin
+        model_loss = self.model_loss
+        x_test_scaled = self.x_test_scaled
+        y_test_win = self.y_test_win
+        y_test_strongwin =self.y_test_strongwin
+        y_test_loss = self.y_test_loss
 
-        loss = results[0]
-        accuracy = results[1]
+        results_win = model_win.evaluate(x_test_scaled, y_test_win)
+        results_strongwin = model_strongwin.evaluate(x_test_scaled, y_test_strongwin)
+        results_loss = model_loss.evaluate(x_test_scaled, y_test_loss)
 
-        print("Test Loss:", loss)
-        print("Test Accuracy:", accuracy)
+        loss_win = results_win[0]
+        accuracy_win = results_win[1]
+
+        loss_strongwin = results_strongwin[0]
+        accuracy_strongwin = results_strongwin[1]
+
+        loss_loss = results_loss[0]
+        accuracy_loss = results_loss[1]
+
+        print("Test Loss (WIN):", loss_win)
+        print("Test Accuracy (WIN):", accuracy_win)
+
+        print("Test Loss (STRONGWIN):", loss_strongwin)
+        print("Test Accuracy (STRONGWIN):", accuracy_strongwin)
+
+        print("Test Loss (LOSS):", loss_loss)
+        print("Test Accuracy (LOSS):", accuracy_loss)
  
 
 
 
 
     def evaluate(self):
+        model_win = self.model_win
+        model_strongwin = self.model_strongwin
+        model_loss = self.model_loss
+        
         last_row = self.df_sql_data.tail(1)[self.input_columns]
-        print("last_row")
-        print(last_row)
-        print("last_row.values")
-        print(last_row.values)
-        #last_row_scaled = self.scaler.transform(last_row.values.reshape(1, -1))
+        last_row_scaled = self.scaler.transform(last_row.values)
 
-        #last_row_scaled = self.scaler.fit_transform(last_row.values)
-        last_row_scaled = last_row.values
-        print("last_row_scaled" )
-        print(last_row_scaled)
-    
-        print("self.x_test_copy" )
-        print(self.x_test_copy[-1])
+        prediction_win = model_win.predict(last_row_scaled)
+        prediction_strongwin = model_strongwin.predict(last_row_scaled)
+        prediction_loss = model_loss.predict(last_row_scaled)
 
-
-        print("  ------->    last_row_scaled",type(last_row_scaled), last_row_scaled.shape)    
-        prediction = model.predict(last_row_scaled)
-    
-        if prediction[0] >= 0.5:
-            print("Buy")
+        if prediction_win[0] >= 0.5:
+            print("Buy (WIN)")
         else:
-            print("Don't Buy")
+            print("Don't Buy (WIN)")
 
-        print(prediction[0])
+        print("Prediction (WIN):", prediction_win[0])
 
-        print("  ------->    self.x_test_copy[-1]",type(self.x_test_copy[-1]),self.x_test_copy[-1].shape)
-        x_test_copy_reshaped = self.x_test_copy[-1].reshape(1,-1)
-        prediction = model.predict(x_test_copy_reshaped)
-    
-        if prediction[0] >= 0.5:
-            print("Buy")
+        if prediction_strongwin[0] >= 0.5:
+            print("Buy (STRONGWIN)")
         else:
-            print("Don't Buy")
+            print("Don't Buy (STRONGWIN)")
 
-        print(prediction[0])
+        print("Prediction (STRONGWIN):", prediction_strongwin[0])
 
-    
+        if prediction_loss[0] >= 0.5:
+            print("Sell (LOSS)")
+        else:
+            print("Don't Sell (LOSS)")
+
+        print("Prediction (LOSS):", prediction_loss[0])

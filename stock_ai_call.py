@@ -8,6 +8,8 @@ from datetime import date
 USERNAME="stocks"
 PASSWORD="stocks"
 
+
+'''
 connection = mysql.connector.connect(host='localhost',
                                          database='stocks',
                                          user=USERNAME,
@@ -21,14 +23,17 @@ cursor.execute(sql_query)
 
 df_sql_data = pd.DataFrame.from_records(cursor.fetchall(), columns=[x[0] for x in cursor.description])
 
-for _, row in df_sql_data.iterrows():
-    stock = stock_ai(row['symbol'], datetime(2023, 7, 12), 3650)
-    stock.update()
+#for _, row in df_sql_data.iterrows():
+    #stock = stock_ai(row['symbol'], datetime(2023, 7, 13), 3650)
+    #stock.update()
+
+'''
+
 
 
 obj = stock_ai('V', datetime(2023, 7, 12), 3650)
 
-obj.update()
+#obj.update()
 
 obj.fill_deltas()
 
@@ -36,4 +41,4 @@ obj.train(3000)
 
 obj.test()
 
-obj.evaluate
+obj.evaluate()
